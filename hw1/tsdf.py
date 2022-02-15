@@ -55,7 +55,7 @@ class TSDFVolume:
         color_bounds = np.append(self._voxel_bounds, 3)
         self._color_volume = np.zeros(color_bounds).astype(np.float32)  # rgb order
 
-        # Get voxel grid coordinates
+        # Get voxel grid coordinates, get all possible iteration of voxel coordinates
         xv, yv, zv = np.meshgrid(
             range(self._voxel_bounds[0]),
             range(self._voxel_bounds[1]),
@@ -89,7 +89,7 @@ class TSDFVolume:
         tsdf_volume, color_vol = self.get_volume()
 
         # Marching cubes
-        voxel_points, triangles, normals, _ = measure.marching_cubes_lewiner(tsdf_volume, level=0)
+        voxel_points, triangles, normals, _ = measure.marching_cubes(tsdf_volume, method='lewiner', level=0)
         points_ind = np.round(voxel_points).astype(int)
         points = self.voxel_to_world(self._volume_origin, voxel_points, self._voxel_size)
 
@@ -130,8 +130,11 @@ class TSDFVolume:
 
         # NOTE: prange is used instead of range(...) to take advantage of parallelism.
         for i in prange(voxel_coords.shape[0]):
-            # TODO:
-            pass
+            x, y, z = voxel_coords[i]
+            world_x = volume_origin[0] + (x * voxel_size)
+            world_y = volume_origin[1] + (y * voxel_size)
+            world_z = volume_origin[2] + (z * voxel_size)
+            world_points[i] = np.array([world_x, world_y, world_z])
         return world_points
 
     @staticmethod
@@ -157,8 +160,8 @@ class TSDFVolume:
         w_new = np.empty_like(w_old, dtype=np.float32)
 
         for i in prange(len(tsdf_old)):
-            # TODO:
-            pass
+            w_new[i] = tsdf_old[i] + observation_weight
+            tsdf_new[i] = (w_old[i] * tsdf_old[i] + observation_weight * margin_distance) / w_new[i]
         return tsdf_new, w_new
 
     def get_valid_points(self, depth_image, voxel_u, voxel_v, voxel_z):
@@ -186,15 +189,21 @@ class TSDFVolume:
 
         # TODO 1:
         #  Eliminate pixels not in the image bounds or that are behind the image plane
+        valid_voxel_u = (voxel_u >= 0) and (voxel_u <= image_width)
+        valid_voxel_v = (voxel_v >= 0) and (voxel_v <= image_height)
 
         # TODO 2.1:
         #  Get depths for valid coordinates u, v from the depth image. Zero elsewhere.
-
-        # TODO 2.2:
-        #  Calculate depth differences
+        round_voxel_u = np.round(voxel_u)
+        round_voxel_v = np.round(voxel_v)
+        round_voxel_u = np.where(valid_voxel_u, round_voxel_u, 0)
+        round_voxel_v = np.where(valid_voxel_v, round_voxel_v, 0)
+        depths = depth_image[round_voxel_u, round_voxel_v]
+        depths = np.where(valid_voxel_u and valid_voxel_v, depths, 0)
 
         # TODO 2.3:
         #  Filter out zero depth values and cases where depth + truncation margin >= voxel_z
+        return depths > 0
 
 
     def get_new_colors_with_weights(self, color_old, color_new, w_old, w_new, observation_weight=1.0):
@@ -212,11 +221,13 @@ class TSDFVolume:
             valid_points numpy.array [n, 3]: The newly computed colors in RGB. Note that
             the input color and output color should have the same dimensions.
         """
+        valid_points = np.empty_like(color_old, dtype=np.float32)
 
-        # TODO: Compute the new R, G, and B value by summing the old color
-        #  value weighted by the old weight, and the new color weighted by
-        #  observation weight. Finally normalize the sum by the new weight.
-        pass
+        for i in prange(len(color_old)):
+            valid_points[i] = (w_old[i] * color_old[i] + observation_weight * color_new) / w_new[i]
+
+        return valid_points
+
 
     def integrate(self, color_image, depth_image, camera_intrinsics, camera_pose, observation_weight=1.):
         """Integrate an RGB-D observation into the TSDF volume, by updating the weight volume,

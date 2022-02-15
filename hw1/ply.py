@@ -22,11 +22,6 @@ class Ply(object):
                 corresponding 3D point. Defaults to None.
         """
         super().__init__()
-        # TODO: If ply path is None, load in triangles, point, normals, colors.
-        #       else load ply from file. If ply_path is specified AND other inputs
-        #       are specified as well, ignore other inputs.
-        # TODO: If normals are not None make sure that there are equal number of points and normals.
-        # TODO: If colors are not None make sure that there are equal number of colors and normals.
         self.ply_path = ply_path
         self.triangles = triangles
         self.points = points
@@ -62,11 +57,6 @@ class Ply(object):
         Args:
             ply_path (str): Output ply path.
         """
-        # TODO: Write header depending on existance of normals, colors, and triangles.
-        # TODO: Write points.
-        # TODO: Write normals if they exist.
-        # TODO: Write colors if they exist.
-        # TODO: Write face list if needed.
         self.validate()
         is_normal = False
         is_color = False
@@ -123,7 +113,6 @@ class Ply(object):
         Args:
             ply_path (str): ply to read in.
         """
-        # TODO: Read in ply.
         self.ply_path = ply_path
         with open(ply_path, 'r') as f:
             file = f.read()

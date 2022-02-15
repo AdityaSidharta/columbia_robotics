@@ -1,0 +1,3 @@
+#!/home/aditya/Git/columbia_robotics/hw1/bin/python
+from numba.pycc import main
+main()

@@ -1,5 +1,12 @@
-from numba import njit, prange
 import numpy as np
+from numba import njit, prange
+
+DEBUG = True
+
+
+def print_debug(x):
+    if DEBUG:
+        print(x)
 
 
 def transform_is_valid(t, tolerance=1e-3):
@@ -20,29 +27,28 @@ def transform_is_valid(t, tolerance=1e-3):
 
     valid = True
 
-    if not t.shape == (4,4):
-        print('A')
+    if not t.shape == (4, 4):
+        print_debug("shape is not right {}".format(t.shape))
         valid = False
     if not np.all(np.isreal(r)):
-        print('B')
+        print_debug("unreal rotation : {}".format(np.isreal(r)))
         valid = False
     if not np.all(np.isreal(d)):
-        print('C')
+        print_debug("unreal translation : {}".format(np.isreal(d)))
         valid = False
     if not (np.all(rest[:-1] == 0) and rest[-1] == 1):
-        print('D')
+        print_debug("incorrect zeros and 1s")
         valid = False
-    if not np.all(np.isclose(r @ np.transpose(r), np.transpose(r) @ r)):
-        print('E')
+    if not np.all(np.isclose(r @ np.transpose(r), np.eye(r.shape[0]).astype(float), atol=0.0001)):
+        print_debug(r @ np.transpose(r))
         valid = False
-    if not np.all(np.isclose(r @ np.transpose(r), np.eye(r.shape[0]).astype(float))):
-        print(r @ np.transpose(r))
+    if not np.all(np.isclose(np.transpose(r) @ r, np.eye(r.shape[0]).astype(float), atol=0.0001)):
+        print_debug(np.transpose(r) @ r)
         valid = False
-    if not np.all(np.isclose(np.linalg.det(r), 1.)):
-        print(np.linalg.det(r))
+    if not np.all(np.isclose(np.linalg.det(r), 1.0)):
+        print_debug(np.linalg.det(r))
         valid = False
     return valid
-
 
 
 def transform_concat(t1, t2):
@@ -60,9 +66,9 @@ def transform_concat(t1, t2):
         numpy.array [4, 4]: t1 * t2.
     """
     if not transform_is_valid(t1):
-        raise ValueError('Invalid input transform t1')
+        raise ValueError("Invalid input transform t1")
     if not transform_is_valid(t2):
-        raise ValueError('Invalid input transform t2')
+        raise ValueError("Invalid input transform t2")
     return t1 @ t2
 
 
@@ -81,10 +87,10 @@ def transform_point3s(t, ps):
         numpy.array [n, 3]: Transformed 3D points.
     """
     if not transform_is_valid(t):
-        raise ValueError('Invalid input transform t')
+        raise ValueError("Invalid input transform t")
     if len(ps.shape) != 2 or ps.shape[1] != 3:
-        raise ValueError('Invalid input points ps')
-    ps_transpose = np.transpose(np.pad(ps, [(0,0),(0,1)], constant_values=1.))
+        raise ValueError("Invalid input points ps")
+    ps_transpose = np.transpose(np.pad(ps, [(0, 0), (0, 1)], constant_values=1.0))
     tmp_result = t @ ps_transpose
     result = np.transpose(tmp_result[:-1])
     return result
@@ -103,7 +109,7 @@ def transform_inverse(t):
         numpy.array [4, 4]: Inverse of the input transform.
     """
     if not transform_is_valid(t):
-        raise ValueError('Invalid input transform t')
+        raise ValueError("Invalid input transform t")
     return np.linalg.inv(t)
 
 
@@ -123,9 +129,9 @@ def camera_to_image(intrinsics, camera_points):
         numpy.array [n, 2]: n 2D projections of the input points on the image plane.
     """
     if intrinsics.shape != (3, 3):
-        raise ValueError('Invalid input intrinsics')
+        raise ValueError("Invalid input intrinsics")
     if len(camera_points.shape) != 2 or camera_points.shape[1] != 3:
-        raise ValueError('Invalid camera point')
+        raise ValueError("Invalid camera point")
 
     u0 = intrinsics[0, 2]
     v0 = intrinsics[1, 2]
@@ -153,7 +159,7 @@ def depth_to_point_cloud(intrinsics, depth_image):
     Returns:
         numpy.array [n, 3]: each row represents a different valid 3D point.
     """
-    assert intrinsics.shape == (3,3)
+    assert intrinsics.shape == (3, 3)
     fu = intrinsics[0][0]
     fv = intrinsics[1][1]
     u0 = intrinsics[0][2]

@@ -1,11 +1,10 @@
-import numpy as np
 import os
-import re
+
+import numpy as np
 
 
 class Ply(object):
-    """Class to represent a ply in memory, read plys, and write plys.
-    """
+    """Class to represent a ply in memory, read plys, and write plys."""
 
     def __init__(self, ply_path=None, triangles=None, points=None, normals=None, colors=None):
         """Initialize the in memory ply representation.
@@ -73,22 +72,22 @@ class Ply(object):
             is_face = True
             n_faces = len(self.triangles)
 
-        result.append('ply')
-        result.append('format ascii 1.0')
-        result.append('element vertex 3')
-        result.append('property float x')
-        result.append('property float y')
-        result.append('property float z')
+        result.append("ply")
+        result.append("format ascii 1.0")
+        result.append("element vertex {}".format(n_points))
+        result.append("property float x")
+        result.append("property float y")
+        result.append("property float z")
         if is_normal:
-            result.append('property float nx')
-            result.append('property float ny')
-            result.append('property float nz')
+            result.append("property float nx")
+            result.append("property float ny")
+            result.append("property float nz")
         if is_color:
-            result.append('property uchar red')
-            result.append('property uchar green')
-            result.append('property uchar blue')
+            result.append("property uchar red")
+            result.append("property uchar green")
+            result.append("property uchar blue")
         if is_face:
-            result.append('element face {}'.format(n_faces))
+            result.append("element face {}".format(n_faces))
             result.append("property list uchar int vertex_index")
         result.append("end_header")
         for idx in range(n_points):
@@ -98,13 +97,13 @@ class Ply(object):
                 tmp_result.extend(self.normals[idx].astype(str))
             if is_color:
                 tmp_result.extend(self.colors[idx].astype(str))
-            result.append(' '.join(tmp_result))
+            result.append(" ".join(tmp_result))
         for idx in range(n_faces):
-            result.append(' '.join(['3'] + self.triangles[idx].astype(str).tolist()))
-        result.append('')
+            result.append(" ".join(["3"] + self.triangles[idx].astype(str).tolist()))
+        result.append("")
 
-        with open(ply_path, 'w') as f:
-            f.write('\n'.join(result))
+        with open(ply_path, "w") as f:
+            f.write("\n".join(result))
         self.ply_path = ply_path
 
     def read(self, ply_path):
@@ -114,9 +113,9 @@ class Ply(object):
             ply_path (str): ply to read in.
         """
         self.ply_path = ply_path
-        with open(ply_path, 'r') as f:
+        with open(ply_path, "r") as f:
             file = f.read()
-        lines = [x for x in file.split('\n') if x != '']
+        lines = [x for x in file.split("\n") if x != ""]
         is_normal = False
         is_color = False
         is_face = False
@@ -126,42 +125,42 @@ class Ply(object):
         self.normals = None
         self.colors = None
 
-        if 'property float nx' in lines:
+        if "property float nx" in lines:
             is_normal = True
-        if 'property uchar red' in lines:
+        if "property uchar red" in lines:
             is_color = True
-        if 'property list uchar int vertex_index' in lines:
+        if "property list uchar int vertex_index" in lines:
             is_face = True
 
-        assert lines.pop(0) == 'ply'
-        assert lines.pop(0) == 'format ascii 1.0'
+        assert lines.pop(0) == "ply"
+        assert lines.pop(0) == "format ascii 1.0"
 
-        vertices = lines.pop(0).split(' ')
+        vertices = lines.pop(0).split(" ")
         assert len(vertices) == 3
-        assert vertices[0] == 'element'
-        assert vertices[1] == 'vertex'
+        assert vertices[0] == "element"
+        assert vertices[1] == "vertex"
         n_points = int(vertices[2])
 
-        assert lines.pop(0) == 'property float x'
-        assert lines.pop(0) == 'property float y'
-        assert lines.pop(0) == 'property float z'
+        assert lines.pop(0) == "property float x"
+        assert lines.pop(0) == "property float y"
+        assert lines.pop(0) == "property float z"
 
         if is_normal:
-            assert lines.pop(0) == 'property float nx'
-            assert lines.pop(0) == 'property float ny'
-            assert lines.pop(0) == 'property float nz'
+            assert lines.pop(0) == "property float nx"
+            assert lines.pop(0) == "property float ny"
+            assert lines.pop(0) == "property float nz"
         if is_color:
-            assert lines.pop(0) == 'property uchar red'
-            assert lines.pop(0) == 'property uchar green'
-            assert lines.pop(0) == 'property uchar blue'
+            assert lines.pop(0) == "property uchar red"
+            assert lines.pop(0) == "property uchar green"
+            assert lines.pop(0) == "property uchar blue"
         if is_face:
-            faces = lines.pop(0).split(' ')
+            faces = lines.pop(0).split(" ")
             assert len(faces) == 3
-            assert faces[0] == 'element'
-            assert faces[1] == 'face', faces
+            assert faces[0] == "element"
+            assert faces[1] == "face", faces
             n_faces = int(faces[2])
-            assert lines.pop(0) == 'property list uchar int vertex_index', lines
-        assert lines.pop(0) == 'end_header'
+            assert lines.pop(0) == "property list uchar int vertex_index", lines
+        assert lines.pop(0) == "end_header"
 
         self.points = np.zeros((n_points, 3), float)
         if is_normal:
@@ -172,7 +171,7 @@ class Ply(object):
             self.triangles = np.zeros((n_faces, 3), int)
 
         for idx in range(n_points):
-            points = lines.pop(0).split(' ')
+            points = lines.pop(0).split(" ")
             self.points[idx][0] = float(points.pop(0))
             self.points[idx][1] = float(points.pop(0))
             self.points[idx][2] = float(points.pop(0))
@@ -186,8 +185,8 @@ class Ply(object):
                 self.colors[idx][2] = int(points.pop(0))
             assert len(points) == 0
         for idx in range(n_faces):
-            faces = lines.pop(0).split(' ')
-            assert faces.pop(0) == '3'
+            faces = lines.pop(0).split(" ")
+            assert faces.pop(0) == "3"
             self.triangles[idx][0] = int(faces.pop(0))
             self.triangles[idx][1] = int(faces.pop(0))
             self.triangles[idx][2] = int(faces.pop(0))

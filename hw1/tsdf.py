@@ -1,11 +1,11 @@
-
 from skimage import measure
+
+import transforms
 from transforms import *
 
 
 class TSDFVolume:
-    """Volumetric TSDF Fusion of RGB-D Images.
-    """
+    """Volumetric TSDF Fusion of RGB-D Images."""
 
     def __init__(self, volume_bounds, voxel_size):
         """Initialize tsdf volume instance variables.
@@ -21,10 +21,10 @@ class TSDFVolume:
         """
         volume_bounds = np.asarray(volume_bounds)
         if volume_bounds.shape != (3, 2):
-            raise ValueError('volume_bounds should be of shape (3, 2).')
+            raise ValueError("volume_bounds should be of shape (3, 2).")
 
         if voxel_size <= 0.0:
-            raise ValueError('voxel size must be positive.')
+            raise ValueError("voxel size must be positive.")
 
         # Define voxel volume parameters
         self._volume_bounds = volume_bounds
@@ -33,19 +33,24 @@ class TSDFVolume:
 
         # Adjust volume bounds and ensure C-order contiguous
         # and calculate voxel bounds taking the voxel size into consideration
-        self._voxel_bounds = np.ceil(
-            (self._volume_bounds[:, 1] - self._volume_bounds[:, 0]) / self._voxel_size
-        ).copy(order='C').astype(int)
+        self._voxel_bounds = (
+            np.ceil((self._volume_bounds[:, 1] - self._volume_bounds[:, 0]) / self._voxel_size)
+            .copy(order="C")
+            .astype(int)
+        )
         self._volume_bounds[:, 1] = self._volume_bounds[:, 0] + self._voxel_bounds * self._voxel_size
 
         # volume min bound is the origin of the volume in world coordinates
-        self._volume_origin = self._volume_bounds[:, 0].copy(order='C').astype(np.float32)
+        self._volume_origin = self._volume_bounds[:, 0].copy(order="C").astype(np.float32)
 
-        print('Voxel volume size: {} x {} x {} - # voxels: {:,}'.format(
-            self._voxel_bounds[0],
-            self._voxel_bounds[1],
-            self._voxel_bounds[2],
-            self._voxel_bounds[0] * self._voxel_bounds[1] * self._voxel_bounds[2]))
+        print(
+            "Voxel volume size: {} x {} x {} - # voxels: {:,}".format(
+                self._voxel_bounds[0],
+                self._voxel_bounds[1],
+                self._voxel_bounds[2],
+                self._voxel_bounds[0] * self._voxel_bounds[1] * self._voxel_bounds[2],
+            )
+        )
 
         # Initialize pointers to voxel volume in memory
         self._tsdf_volume = np.ones(self._voxel_bounds).astype(np.float32)
@@ -57,14 +62,11 @@ class TSDFVolume:
 
         # Get voxel grid coordinates, get all possible iteration of voxel coordinates
         xv, yv, zv = np.meshgrid(
-            range(self._voxel_bounds[0]),
-            range(self._voxel_bounds[1]),
-            range(self._voxel_bounds[2]),
-            indexing='ij')
-        self._voxel_coords = np.concatenate([
-            xv.reshape(1, -1),
-            yv.reshape(1, -1),
-            zv.reshape(1, -1)], axis=0).astype(int).T
+            range(self._voxel_bounds[0]), range(self._voxel_bounds[1]), range(self._voxel_bounds[2]), indexing="ij"
+        )
+        self._voxel_coords = (
+            np.concatenate([xv.reshape(1, -1), yv.reshape(1, -1), zv.reshape(1, -1)], axis=0).astype(int).T
+        )
 
     def get_volume(self):
         """Get the tsdf and color volumes.
@@ -78,7 +80,7 @@ class TSDFVolume:
         return self._tsdf_volume, self._color_volume
 
     def get_mesh(self):
-        """ Run marching cubes over the constructed tsdf volume to get a mesh representation.
+        """Run marching cubes over the constructed tsdf volume to get a mesh representation.
 
         Returns:
             numpy.array [n, 3]: each row represents a 3D point.
@@ -89,7 +91,7 @@ class TSDFVolume:
         tsdf_volume, color_vol = self.get_volume()
 
         # Marching cubes
-        voxel_points, triangles, normals, _ = measure.marching_cubes(tsdf_volume, method='lewiner', level=0)
+        voxel_points, triangles, normals, _ = measure.marching_cubes(tsdf_volume, method="lewiner", level=0)
         points_ind = np.round(voxel_points).astype(int)
         points = self.voxel_to_world(self._volume_origin, voxel_points, self._voxel_size)
 
@@ -112,7 +114,7 @@ class TSDFVolume:
     @staticmethod
     @njit(parallel=True)
     def voxel_to_world(volume_origin, voxel_coords, voxel_size):
-        """ Convert from voxel coordinates to world coordinates
+        """Convert from voxel coordinates to world coordinates
             (in effect scaling voxel_coords by voxel_size).
 
         Args:
@@ -160,12 +162,24 @@ class TSDFVolume:
         w_new = np.empty_like(w_old, dtype=np.float32)
 
         for i in prange(len(tsdf_old)):
-            w_new[i] = tsdf_old[i] + observation_weight
-            tsdf_new[i] = (w_old[i] * tsdf_old[i] + observation_weight * margin_distance) / w_new[i]
+            w_new[i] = w_old[i] + observation_weight
+            tsdf_new[i] = (w_old[i] * tsdf_old[i] + observation_weight * margin_distance[i]) / w_new[i]
         return tsdf_new, w_new
 
+    def get_values(self, image, voxel_u, voxel_v, valid_voxel, dtype=float):
+        result = np.zeros_like(valid_voxel, dtype=dtype)
+        round_voxel_u = np.round(voxel_u[valid_voxel])
+        round_voxel_v = np.round(voxel_v[valid_voxel])
+        print_debug("Image.shape : {}".format(image.shape))
+        valid_result = image[round_voxel_v, round_voxel_u]
+        result[valid_voxel] = valid_result
+        print_debug("len valid_result : {}".format(len(valid_result)))
+        print_debug("len zero result : {}".format(np.sum(result == 0.0)))
+        print_debug("len nonzero result : {}".format(np.sum(result != 0.0)))
+        return result
+
     def get_valid_points(self, depth_image, voxel_u, voxel_v, voxel_z):
-        """ Compute a boolean array for indexing the voxel volume and other variables.
+        """Compute a boolean array for indexing the voxel volume and other variables.
         Note that every time the method integrate(...) is called, not every voxel in
         the volume will be updated. This method returns a boolean matrix called
         valid_points with dimension (n, ), where n = # of voxels. Index i of
@@ -189,25 +203,29 @@ class TSDFVolume:
 
         # TODO 1:
         #  Eliminate pixels not in the image bounds or that are behind the image plane
-        valid_voxel_u = (voxel_u >= 0) and (voxel_u <= image_width)
-        valid_voxel_v = (voxel_v >= 0) and (voxel_v <= image_height)
+        valid_voxel_u = (voxel_u >= 0) & (voxel_u < image_width - 0.5)
+        valid_voxel_v = (voxel_v >= 0) & (voxel_v < image_height - 0.5)
+        valid_voxel = valid_voxel_u & valid_voxel_v
+
+        print_debug("max_voxel_u : {}".format(max(voxel_u)))
+        print_debug("min_voxel_u : {}".format(min(voxel_u)))
+        print_debug("max_voxel_v : {}".format(max(voxel_v)))
+        print_debug("min_voxel_v : {}".format(min(voxel_v)))
+        print_debug("max_valid_voxel_u : {}".format(max(voxel_u[valid_voxel])))
+        print_debug("min_valid_voxel_u : {}".format(min(voxel_u[valid_voxel])))
+        print_debug("max_valid_voxel_v : {}".format(max(voxel_v[valid_voxel])))
+        print_debug("min_valid_voxel_v : {}".format(min(voxel_v[valid_voxel])))
 
         # TODO 2.1:
         #  Get depths for valid coordinates u, v from the depth image. Zero elsewhere.
-        round_voxel_u = np.round(voxel_u)
-        round_voxel_v = np.round(voxel_v)
-        round_voxel_u = np.where(valid_voxel_u, round_voxel_u, 0)
-        round_voxel_v = np.where(valid_voxel_v, round_voxel_v, 0)
-        depths = depth_image[round_voxel_u, round_voxel_v]
-        depths = np.where(valid_voxel_u and valid_voxel_v, depths, 0)
+        depths = self.get_values(depth_image, voxel_u, voxel_v, valid_voxel)
 
         # TODO 2.3:
         #  Filter out zero depth values and cases where depth + truncation margin >= voxel_z
         return depths > 0
 
-
     def get_new_colors_with_weights(self, color_old, color_new, w_old, w_new, observation_weight=1.0):
-        """ Compute the new RGB values for the color volume given the current values
+        """Compute the new RGB values for the color volume given the current values
         in the color volume, the RGB image pixels, and the old and new weights.
 
         Args:
@@ -224,12 +242,11 @@ class TSDFVolume:
         valid_points = np.empty_like(color_old, dtype=np.float32)
 
         for i in prange(len(color_old)):
-            valid_points[i] = (w_old[i] * color_old[i] + observation_weight * color_new) / w_new[i]
+            valid_points[i] = (w_old[i] * color_old[i] + observation_weight * color_new[i]) / w_new[i]
 
         return valid_points
 
-
-    def integrate(self, color_image, depth_image, camera_intrinsics, camera_pose, observation_weight=1.):
+    def integrate(self, color_image, depth_image, camera_intrinsics, camera_pose, observation_weight=1.0):
         """Integrate an RGB-D observation into the TSDF volume, by updating the weight volume,
             tsdf volume, and color volume.
 
@@ -242,28 +259,96 @@ class TSDFVolume:
                 observation. Defaults to 1.
         """
         color_image = color_image.astype(np.float32)
+        observation_weight = np.float32(observation_weight)
+        n = len(self._voxel_coords)
 
         # TODO: 1. Project the voxel grid coordinates to the world
         #  space by calling `voxel_to_world`. Then, transform the points
         #  in world coordinate to camera coordinates, which are in (u, v).
         #  You might want to save the voxel z coordinate for later use.
+        voxel_coords = self._voxel_coords
+        world_coords = self.voxel_to_world(self._volume_origin, voxel_coords, self._voxel_size)
+        camera_coords = transforms.transform_point3s(transforms.transform_inverse(camera_pose), world_coords)
+        image_coords = transforms.camera_to_image(camera_intrinsics, camera_coords)
+        voxel_u = image_coords[:, 0]
+        voxel_v = image_coords[:, 1]
+        voxel_z = camera_coords[:, 2]
+
+        assert voxel_coords.shape == (n, 3)
+        assert world_coords.shape == (n, 3)
+        # assert camera_coords == (n, 3)
+        assert image_coords.shape == (n, 2)
+        assert voxel_u.shape == (n,), voxel_u.shape
+        assert voxel_v.shape == (n,)
+        assert voxel_z.shape == (n,)
 
         # TODO: 2.
         #  Get all of the valid points in the voxel grid by implementing
         #  the helper get_valid_points. Be sure to pass in the correct parameters.
+        valid_coords = self.get_valid_points(depth_image, voxel_u, voxel_v, voxel_z)
+        v = np.sum(valid_coords)
+
+        image_depth = self.get_values(depth_image, voxel_u, voxel_v, valid_coords)
+        image_r = self.get_values(color_image[:, :, 0], voxel_u, voxel_v, valid_coords)
+        image_g = self.get_values(color_image[:, :, 1], voxel_u, voxel_v, valid_coords)
+        image_b = self.get_values(color_image[:, :, 2], voxel_u, voxel_v, valid_coords)
+
+        assert valid_coords.shape == (n,)
+        assert image_depth.shape == (n,)
+        assert image_r.shape == (n,)
+        assert image_g.shape == (n,)
+        assert image_b.shape == (n,)
 
         # TODO: 3.
         #  With the valid_points array as your indexing array, index into
         #  the self._voxel_coords variable to get the valid voxel x, y, and z.
 
+        valid_voxel_idx_x = voxel_coords[:, 0][valid_coords]
+        valid_voxel_idx_y = voxel_coords[:, 1][valid_coords]
+        valid_voxel_idx_z = voxel_coords[:, 2][valid_coords]
+
+        assert valid_voxel_idx_x.shape == (v,)
+        assert valid_voxel_idx_y.shape == (v,)
+        assert valid_voxel_idx_z.shape == (v,)
+
         # TODO: 4. With the valid_points array as your indexing array,
         #  get the valid pixels. Use those valid pixels to index into
         #  the depth_image, and find the valid margin distance.
+        valid_voxel_z = voxel_z[valid_coords]
+        valid_image_depth = image_depth[valid_coords]
+        margin_distance = valid_image_depth - valid_voxel_z
+        margin_distance = margin_distance.astype(np.float32)
+
+        assert valid_voxel_z.shape == (v,)
+        assert valid_image_depth.shape == (v,)
+        assert margin_distance.shape == (v,)
 
         # TODO: 5.
         #  Compute the new weight volume and tsdf volume by calling
         #  `get_new_tsdf_and_weights`. Then update the weight volume
         #  and tsdf volume.
+
+        tsdf_old = self._tsdf_volume[valid_voxel_idx_x, valid_voxel_idx_y, valid_voxel_idx_z]
+        weight_old = self._weight_volume[valid_voxel_idx_x, valid_voxel_idx_y, valid_voxel_idx_z]
+        tsdf_old = tsdf_old.astype(np.float32)
+        weight_old = weight_old.astype(np.float32)
+
+        tsdf_new, weight_new = self.get_new_tsdf_and_weights(tsdf_old, margin_distance, weight_old, observation_weight)
+
+        print(
+            "shape of tsdf_volume to be updated : {}".format(
+                self._tsdf_volume[valid_voxel_idx_x, valid_voxel_idx_y, valid_voxel_idx_z].shape
+            )
+        )
+        print("shape of tsdf_new : {}".format(tsdf_new.shape))
+
+        self._tsdf_volume[valid_voxel_idx_x, valid_voxel_idx_y, valid_voxel_idx_z] = tsdf_new
+        self._weight_volume[valid_voxel_idx_x, valid_voxel_idx_y, valid_voxel_idx_z] = weight_new
+
+        assert tsdf_old.shape == (v,)
+        assert weight_old.shape == (v,)
+        assert tsdf_new.shape == (v,)
+        assert weight_new.shape == (v,)
 
         # TODO: 6.
         #  Compute the new colors for only the valid voxels by using
@@ -272,6 +357,22 @@ class TSDFVolume:
         #  be obtained by indexing the valid voxels in the color volume and
         #  indexing the valid pixels in the rgb image.
 
+        valid_image_r = image_r[valid_coords]
+        valid_image_g = image_g[valid_coords]
+        valid_image_b = image_b[valid_coords]
+        color_old = self._color_volume[valid_voxel_idx_x, valid_voxel_idx_y, valid_voxel_idx_z, :]
+        color_new = np.transpose(np.vstack([valid_image_r, valid_image_g, valid_image_b]))
+        result_color_new = self.get_new_colors_with_weights(
+            color_old, color_new, weight_old, weight_new, observation_weight
+        )
+        self._color_volume[valid_voxel_idx_x, valid_voxel_idx_y, valid_voxel_idx_z] = result_color_new
+
+        assert valid_image_r.shape == (v,)
+        assert valid_image_b.shape == (v,)
+        assert valid_image_b.shape == (v,)
+        assert color_old.shape == (v, 3)
+        assert color_new.shape == (v, 3)
+        # assert result_color_new == (v, 3), result_color_new.shape
 
     """
     *******************************************************************************

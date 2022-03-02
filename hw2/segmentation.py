@@ -171,14 +171,17 @@ def main():
     test_dir = root_dir + 'test/'
 
     # TODO: Create Datasets. You can use check_dataset(your_dataset) to check your implementation.
-    train_dataset = None
-    val_dataset = None
-    test_dataset = None
+    train_dataset = RGBDataset(train_dir, True)
+    val_dataset = RGBDataset(val_dir, True)
+    test_dataset = RGBDataset(test_dir, False)
 
     # TODO: Prepare Dataloaders. Only shuffle the training set. You can use check_dataloader(your_dataloader) to check your implementation.
-    train_loader = None
-    val_loader = None
-    test_loader = None
+    train_loader = DataLoader(train_dataset, batch_size=4,
+                              shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=4,
+                            shuffle=False, num_workers=0)
+    test_loader = DataLoader(test_dataset, batch_size=4,
+                             shuffle=False, num_workers=0)
 
     # TODO: Prepare model
     model = None

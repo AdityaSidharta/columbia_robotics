@@ -1,5 +1,5 @@
 import os
-
+import re
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -25,13 +25,30 @@ class RGBDataset(Dataset):
 
         self.dataset_dir = dataset_dir
         self.has_gt = has_gt
-        # TODO: transform to be applied on a sample.
-        #  For this homework, compose transforms.ToTensor() and transforms.Normalize() for RGB image should be enough.
-        self.transform = None
-        # TODO: number of samples in the dataset.
-        #  You'd better not hard code the number,
-        #  because this class is used to create train, validation and test dataset (which have different sizes).
-        self.dataset_length = None
+
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean_rgb,
+                                 std=std_rgb)
+        ])
+
+        self.rgb_dir = os.path.join(self.dataset_dir, 'rgb')
+        self.gt_dir = os.path.join(self.dataset_dir, 'gt')
+
+        if not os.path.exists(self.rgb_dir):
+            raise FileNotFoundError("rgb folder should exist in {}".format(self.dataset_dir))
+        else:
+            self.rgb_filenames = [os.path.join(self.rgb_dir, x) for x in os.listdir(self.rgb_dir) if x.endswith('.png')]
+            self.rgb_filenames.sort(key=lambda f: int(re.sub('\D', '', f)))
+
+        if os.path.exists(self.gt_dir):
+            self.gt_filenames = [os.path.join(self.gt_dir, x) for x in os.listdir(self.gt_dir) if x.endswith('.png')]
+            self.gt_filenames.sort(key=lambda f: int(re.sub('\D', '', f)))
+            assert len(self.rgb_filenames) == len(self.gt_filenames)
+        else:
+            self.gt_filenames = None
+
+        self.dataset_length = len(self.rgb_filenames)
 
     def __len__(self):
         return self.dataset_length
@@ -50,11 +67,12 @@ class RGBDataset(Dataset):
             Use image.read_rgb() and image.read_mask() to read the images.
             Think about how to associate idx with the file name of images.
         """
-        # TODO: read RGB image and ground truth mask, apply the transformation, and pair them as a sample.
-        rgb_img = None
-        gt_mask = None
+        rgb_img = image.read_rgb(self.rgb_filenames[idx])
+        rgb_img = self.transform(rgb_img)
         if self.has_gt is False:
             sample = {'input': rgb_img}
         else:
+            gt_mask = image.read_mask(self.gt_filenames[idx])
+            gt_mask = transforms.ToTensor()(gt_mask).type(torch.LongTensor)
             sample = {'input': rgb_img, 'target': gt_mask}
         return sample

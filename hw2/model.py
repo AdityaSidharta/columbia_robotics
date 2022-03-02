@@ -8,7 +8,13 @@ class MiniUNet(nn.Module):
     def __init__(self):
         """Initialize the layers of the network as instance variables."""
         super(MiniUNet, self).__init__()
-        # TODO
+        self.conv1 = nn.Conv2d(3, 16, 3)
+        self.conv2 = nn.Conv2d(16, 32, 3)
+        self.conv3 = nn.Conv2d(32, 64, 3)
+        self.conv4 = nn.Conv2d(64, 128, 3)
+        self.conv5 = nn.Conv2d(128, 128, 1)
+
+        self.inter1 = nn.Inter
 
     def forward(self, x):
         """

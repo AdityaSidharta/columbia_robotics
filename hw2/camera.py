@@ -44,8 +44,18 @@ class Camera(object):
         Purpose:
             Compute intrinsic and projection matrices from instance variables in Camera class.
         """
-        intrinsic_matrix = np.eye(3)  # TODO: compute camera intrinsic_matrix from camera parameters
-        projection_matrix = p.computeProjectionMatrixFOV()  # TODO: compute projection_matrix from camera parameters
+        intrinsic_matrix = np.eye(3)
+        intrinsic_matrix[0, 0] = float(self.focal_length)
+        intrinsic_matrix[1, 1] = float(self.focal_length)
+        intrinsic_matrix[0, 2] = float(self.image_size[1])
+        intrinsic_matrix[1, 2] = float(self.image_size[0])
+
+        projection_matrix = p.computeProjectionMatrixFOV(
+            fov = self.fov_height,
+            aspect = self.image_size[1] / self.image_size[0],
+            nearVal = self.near,
+            farVal = self.far,
+        )
         return intrinsic_matrix, projection_matrix
 
 

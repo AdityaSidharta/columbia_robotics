@@ -6,4 +6,3 @@ scipy==1.5.2
 torch==1.4.0
 torchvision==0.5.0
 trimesh==3.8.5
-tensorboard==2.8.0

@@ -9,10 +9,10 @@ import image
 from dataset import RGBDataset
 from model import MiniUNet
 from segmentation_helper import check_dataset, check_dataloader, show_mask
-
-from torch.utils.tensorboard import SummaryWriter
-
-writer = SummaryWriter(log_dir='./logs')
+#
+# from torch.utils.tensorboard import SummaryWriter
+#
+# writer = SummaryWriter(log_dir='./logs')
 
 def iou(prediction, target):
     """
@@ -149,22 +149,24 @@ def train(model, device, train_loader, criterion, optimizer):
     train_loss, train_iou = 0, 0
     n_samples = 0
     for idx, train_batch in enumerate(train_loader):
-        input_batch = train_batch['input']
-        target_batch = train_batch['target'].squeeze(dim=1)
+        input_batch = train_batch['input'].to(device)
+        target_batch = train_batch['target'].to(device)
         optimizer.zero_grad()
 
         n = input_batch.shape[0]
         output_batch = model(input_batch)
-        loss_batch = criterion(output_batch, target_batch).mean(axis=[1,2]).sum()
-        iou_batch = np.sum([x if not np.isnan(x) else 0. for x in iou(output_batch, target_batch)])
+        loss_batch = criterion(output_batch, target_batch)
+        print(loss_batch)
+        # loss_batch = criterion(output_batch, target_batch).mean(axis=[1,2]).sum()
+        iou_batch = np.sum(iou(output_batch, target_batch))
 
         loss_batch.backward()
         optimizer.step()
+        #
+        # writer.add_scalar('train/loss', loss_batch, idx)
+        # writer.add_scalar('train/iou', iou_batch, idx)
 
-        writer.add_scalar('train/loss', loss_batch, idx)
-        writer.add_scalar('train/iou', iou_batch, idx)
-
-        train_loss = train_loss + loss_batch.item()
+        train_loss = train_loss + (loss_batch.item() * n)
         train_iou = train_iou + iou_batch
         n_samples = n_samples + n
     return train_loss / n_samples, train_iou / n_samples
@@ -180,18 +182,19 @@ def val(model, device, val_loader, criterion):
     n_samples = 0
     with torch.no_grad():
         for idx, val_batch in enumerate(val_loader):
-            input_batch = val_batch['input']
-            target_batch = val_batch['target'].squeeze(dim=1)
+            input_batch = val_batch['input'].to(device)
+            target_batch = val_batch['target'].to(device)
 
             n = input_batch.shape[0]
             output_batch = model(input_batch)
-            loss_batch = criterion(output_batch, target_batch).mean(axis=[1,2]).sum()
-            iou_batch = np.sum([x if not np.isnan(x) else 0. for x in iou(output_batch, target_batch)])
+            loss_batch = criterion(output_batch, target_batch)
+            # loss_batch = criterion(output_batch, target_batch).mean(axis=[1,2]).sum()
+            iou_batch = np.sum(iou(output_batch, target_batch))
+            #
+            # writer.add_scalar('val/loss', loss_batch, idx)
+            # writer.add_scalar('val/iou', iou_batch, idx)
 
-            writer.add_scalar('val/loss', loss_batch, idx)
-            writer.add_scalar('val/iou', iou_batch, idx)
-
-            val_loss = val_loss + loss_batch.item()
+            val_loss = val_loss + (loss_batch.item() * n)
             val_iou = val_iou + iou_batch
             n_samples = n_samples + n
     return val_loss / n_samples, val_iou / n_samples
@@ -225,7 +228,7 @@ def main():
     model = MiniUNet()
 
     # TODO: Define criterion and optimizer
-    criterion = torch.nn.CrossEntropyLoss(reduction='none')
+    criterion = torch.nn.CrossEntropyLoss(reduction='mean')
     optimizer = torch.optim.Adam(model.parameters())
 
     # Train and validate the model

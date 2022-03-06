@@ -8,13 +8,18 @@ class MiniUNet(nn.Module):
     def __init__(self):
         """Initialize the layers of the network as instance variables."""
         super(MiniUNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 16, 3)
-        self.conv2 = nn.Conv2d(16, 32, 3)
-        self.conv3 = nn.Conv2d(32, 64, 3)
-        self.conv4 = nn.Conv2d(64, 128, 3)
-        self.conv5 = nn.Conv2d(128, 128, 1)
-
-        self.inter1 = nn.Inter
+        self.left_conv1 = nn.Conv2d(3, 16, 3, padding=1)
+        self.left_conv2 = nn.Conv2d(16, 32, 3, padding=1)
+        self.left_conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        self.left_conv4 = nn.Conv2d(64, 128, 3, padding=1)
+        self.left_conv5 = nn.Conv2d(128, 256, 3, padding=1)
+        self.right_conv1 = nn.Conv2d(384, 128, 3, padding=1)
+        self.right_conv2 = nn.Conv2d(192, 64, 3, padding=1)
+        self.right_conv3 = nn.Conv2d(96, 32, 3, padding=1)
+        self.right_conv4 = nn.Conv2d(48, 16, 3, padding=1)
+        self.right_conv5 = nn.Conv2d(16, 6, 1)
+        self.max_pool = nn.MaxPool2d(2, 2)
+        self.relu = nn.ReLU()
 
     def forward(self, x):
         """
@@ -25,9 +30,34 @@ class MiniUNet(nn.Module):
         Purpose:
             Forward process. Pass the input x through the layers defined in __init__() to get the output.
         """
-        # TODO
-        output = None
-        return output
+        x_1 = self.relu(self.left_conv1(x))
+        x_2_a = self.max_pool(x_1)
+        x_2 = self.relu(self.left_conv2(x_2_a))
+        x_3_a = self.max_pool(x_2)
+        x_3 = self.relu(self.left_conv3(x_3_a))
+        x_4_a = self.max_pool(x_3)
+        x_4 = self.relu(self.left_conv4(x_4_a))
+        x_5_a = self.max_pool(x_4)
+        x_5 = self.relu(self.left_conv5(x_5_a))
+
+        x_6_b = F.interpolate(x_5, scale_factor=(2,2))
+        x_6_f = torch.cat((x_4, x_6_b), 1)
+        x_6 = self.relu(self.right_conv1(x_6_f))
+
+        x_7_b = F.interpolate(x_6, scale_factor=(2,2))
+        x_7_f = torch.cat((x_3, x_7_b), 1)
+        x_7 = self.relu(self.right_conv2(x_7_f))
+
+        x_8_b = F.interpolate(x_7, scale_factor=(2,2))
+        x_8_f = torch.cat((x_2, x_8_b), 1)
+        x_8 = self.relu(self.right_conv3(x_8_f))
+
+        x_9_b = F.interpolate(x_8, scale_factor=(2,2))
+        x_9_f = torch.cat((x_1, x_9_b), 1)
+        x_9 = self.relu(self.right_conv4(x_9_f))
+
+        out = self.right_conv5(x_9)
+        return out
 
 
 if __name__ == '__main__':

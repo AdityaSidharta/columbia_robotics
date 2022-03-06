@@ -73,6 +73,6 @@ class RGBDataset(Dataset):
             sample = {'input': rgb_img}
         else:
             gt_mask = image.read_mask(self.gt_filenames[idx])
-            gt_mask = transforms.ToTensor()(gt_mask).type(torch.LongTensor)
+            gt_mask = transforms.ToTensor()(gt_mask).type(torch.long)
             sample = {'input': rgb_img, 'target': gt_mask}
         return sample

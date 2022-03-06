@@ -10,6 +10,9 @@ from dataset import RGBDataset
 from model import MiniUNet
 from segmentation_helper import check_dataset, check_dataloader, show_mask
 
+from torch.utils.tensorboard import SummaryWriter
+
+writer = SummaryWriter(log_dir='./logs')
 
 def iou(prediction, target):
     """
@@ -142,9 +145,29 @@ def train(model, device, train_loader, criterion, optimizer):
     Do forward + backward + optimize procedure. Compute average sample loss and mIoU on the dataset.
     """
     model.train()
+    model = model.to(device)
     train_loss, train_iou = 0, 0
-    # TODO
-    return train_loss, train_iou
+    n_samples = 0
+    for idx, train_batch in enumerate(train_loader):
+        input_batch = train_batch['input']
+        target_batch = train_batch['target'].squeeze(dim=1)
+        optimizer.zero_grad()
+
+        n = input_batch.shape[0]
+        output_batch = model(input_batch)
+        loss_batch = criterion(output_batch, target_batch).mean(axis=[1,2]).sum()
+        iou_batch = np.sum([x if not np.isnan(x) else 0. for x in iou(output_batch, target_batch)])
+
+        loss_batch.backward()
+        optimizer.step()
+
+        writer.add_scalar('train/loss', loss_batch, idx)
+        writer.add_scalar('train/iou', iou_batch, idx)
+
+        train_loss = train_loss + loss_batch.item()
+        train_iou = train_iou + iou_batch
+        n_samples = n_samples + n
+    return train_loss / n_samples, train_iou / n_samples
 
 
 def val(model, device, val_loader, criterion):
@@ -152,11 +175,26 @@ def val(model, device, val_loader, criterion):
     Similar to train(), but no need to backward and optimize.
     """
     model.eval()
+    model = model.to(device)
     val_loss, val_iou = 0, 0
+    n_samples = 0
     with torch.no_grad():
-        # TODO
-        pass
-    return val_loss, val_iou
+        for idx, val_batch in enumerate(val_loader):
+            input_batch = val_batch['input']
+            target_batch = val_batch['target'].squeeze(dim=1)
+
+            n = input_batch.shape[0]
+            output_batch = model(input_batch)
+            loss_batch = criterion(output_batch, target_batch).mean(axis=[1,2]).sum()
+            iou_batch = np.sum([x if not np.isnan(x) else 0. for x in iou(output_batch, target_batch)])
+
+            writer.add_scalar('val/loss', loss_batch, idx)
+            writer.add_scalar('val/iou', iou_batch, idx)
+
+            val_loss = val_loss + loss_batch.item()
+            val_iou = val_iou + iou_batch
+            n_samples = n_samples + n
+    return val_loss / n_samples, val_iou / n_samples
 
 
 def main():
@@ -184,11 +222,11 @@ def main():
                              shuffle=False, num_workers=0)
 
     # TODO: Prepare model
-    model = None
+    model = MiniUNet()
 
     # TODO: Define criterion and optimizer
-    criterion = None
-    optimizer = None
+    criterion = torch.nn.CrossEntropyLoss(reduction='none')
+    optimizer = torch.optim.Adam(model.parameters())
 
     # Train and validate the model
     # TODO: Remember to include the saved learning curve plot in your report

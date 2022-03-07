@@ -56,7 +56,6 @@ class MiniUNet(nn.Module):
         x_9 = nn.ReLU()(self.right_conv4(x_9_f))
 
         out = self.right_conv5(x_9)
-        out = self.softmax(out)
         return out
 
 

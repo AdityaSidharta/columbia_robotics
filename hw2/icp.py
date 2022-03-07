@@ -53,8 +53,13 @@ def gen_obj_depth(obj_id, depth, mask):
         Generate depth image for a specific object given obj_id.
         Generate depth for all objects when obj_id == -1. You should filter out the depth of the background, where the ID is 0 in the mask. We want to preserve depth only for object 1 to 5 inclusive.
     """
-    # TODO
-    obj_depth = None
+    assert depth.shape == mask.shape
+    if obj_id == -1:
+        obj_depth = np.where(mask == 0, 0., depth)
+    elif obj_id in [1,2,3,4,5]:
+        obj_depth = np.where(mask == obj_id, depth, 0.)
+    else:
+        raise ValueError("Invalid obj_id : {}".format(obj_id))
     return obj_depth
 
 
@@ -74,8 +79,10 @@ def obj_depth2pts(obj_id, depth, mask, camera, view_matrix):
         The imported depth_to_point_cloud(), cam_view2pose() and transform_point3s() can be useful here.
         The view matrices are provided in the /dataset/val/view_matrix or /dataset/test/view_matrix folder.
     """
-    # TODO
-    world_pts = None
+    depth = gen_obj_depth(obj_id, depth, mask)
+    camera_pts = depth_to_point_cloud(camera, depth)
+    campose = cam_view2pose(view_matrix)
+    world_pts = transform_point3s(campose, camera_pts)
     return world_pts
 
 
@@ -94,8 +101,16 @@ def align_pts(pts_a, pts_b, max_iterations=20, threshold=1e-05):
         Use trimesh.registration.icp() and trimesh.registration.procrustes().
         scale=False and reflection=False should be passed to both icp() and procrustes().
     """
-    # TODO
-    matrix = None
+    try:
+        initial_transformation, _, _ = trimesh.registration.proscrustes(pts_a, pts_b, reflection=False, translation=True, scale=False)
+        transformation, _, _ = trimesh.registration.icp(pts_a, pts_b, initial_transformation, threshold=threshold, max_iterations=max_iterations, kwargs={
+            'scale': False,
+            'reflection': False
+        })
+    except np.linalg.LinAlgError:
+        return None
+
+    matrix = transformation
     return matrix
 
 
@@ -114,7 +129,7 @@ def estimate_pose(depth, mask, camera, view_matrix):
     Purpose:
         Perform pose estimation on each object in the given image.
     """
-    # TODO
+    
     list_obj_pose = list()
     return list_obj_pose
 

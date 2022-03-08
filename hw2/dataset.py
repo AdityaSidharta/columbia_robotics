@@ -72,7 +72,6 @@ class RGBDataset(Dataset):
         if self.has_gt is False:
             sample = {'input': rgb_img}
         else:
-            print(self.gt_filenames[idx])
             gt_mask = image.read_mask(self.gt_filenames[idx])
             gt_mask = torch.LongTensor(gt_mask)
             sample = {'input': rgb_img, 'target': gt_mask}

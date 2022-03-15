@@ -80,7 +80,7 @@ def obj_depth2pts(obj_id, depth, mask, camera, view_matrix):
         The view matrices are provided in the /dataset/val/view_matrix or /dataset/test/view_matrix folder.
     """
     depth = gen_obj_depth(obj_id, depth, mask)
-    camera_pts = depth_to_point_cloud(camera, depth)
+    camera_pts = depth_to_point_cloud(camera.intrinsic_matrix, depth)
     campose = cam_view2pose(view_matrix)
     world_pts = transform_point3s(campose, camera_pts)
     return world_pts
@@ -102,11 +102,8 @@ def align_pts(pts_a, pts_b, max_iterations=20, threshold=1e-05):
         scale=False and reflection=False should be passed to both icp() and procrustes().
     """
     try:
-        initial_transformation, _, _ = trimesh.registration.proscrustes(pts_a, pts_b, reflection=False, translation=True, scale=False)
-        transformation, _, _ = trimesh.registration.icp(pts_a, pts_b, initial_transformation, threshold=threshold, max_iterations=max_iterations, kwargs={
-            'scale': False,
-            'reflection': False
-        })
+        initial_transformation, _, _ = trimesh.registration.procrustes(pts_a, pts_b, reflection=False, translation=True, scale=False)
+        transformation, _, _ = trimesh.registration.icp(pts_a, pts_b, initial_transformation, threshold=threshold, max_iterations=max_iterations, scale=False, reflection=False)
     except np.linalg.LinAlgError:
         return None
 
@@ -131,6 +128,11 @@ def estimate_pose(depth, mask, camera, view_matrix):
     """
     
     list_obj_pose = list()
+    for obj_id in [1, 2, 3, 4, 5]:
+        est_pts = obj_depth2pts(obj_id, depth, mask, camera, view_matrix)
+        mesh_pts = obj_mesh2pts(obj_id, len(est_pts), transform=None)
+        tfm_matrix = align_pts(mesh_pts, est_pts, max_iterations=10000, threshold=1e-10)
+        list_obj_pose.append(tfm_matrix)
     return list_obj_pose
 
 
@@ -222,9 +224,13 @@ def export_pred_ply(dataset_dir, scene_id, suffix, list_obj_pose):
 def main():
     args = parser.parse_args()
     if args.val:
+        val = True
+        suffixes=['gtmask_transformed', 'predmask_transformed']
         dataset_dir = "./dataset/val/"
         print("Pose estimation for validation set")
     elif args.test:
+        val = False
+        suffixes=['predmask_transformed']
         dataset_dir = "./dataset/test/"
         print("Pose estimation for test set")
     else:
@@ -254,7 +260,22 @@ def main():
     #  Use save_pose(), export_gt_ply() and export_pred_ply() to generate files to be submitted.
     for scene_id in range(5):
         print("Estimating scene", scene_id)
-        # TODO
+        depth_path = os.path.join(dataset_dir, 'depth', '{}_depth.png'.format(scene_id))
+        view_path = os.path.join(dataset_dir, 'view_matrix', '{}.npy'.format(scene_id))
+        depth = image.read_depth(depth_path)
+        view_matrix = np.load(view_path)
+        if val:
+            gt_path = os.path.join(dataset_dir, 'gt', '{}_gt.png'.format(scene_id))
+            gt_mask = image.read_mask(gt_path)
+            gt_object_pose = estimate_pose(depth, gt_mask, my_camera, view_matrix)
+            save_pose(dataset_dir, 'gtmask', scene_id, gt_object_pose)
+            export_gt_ply(scene_id, depth, gt_mask, my_camera, view_matrix)
+        pred_path = os.path.join(dataset_dir, 'pred', '{}_pred.png'.format(scene_id))
+        pred_mask = image.read_mask(pred_path)
+        pred_object_pose = estimate_pose(depth, pred_mask, my_camera, view_matrix)
+        save_pose(dataset_dir, 'predmask', scene_id, pred_object_pose)
+        for suffix in suffixes:
+            export_pred_ply(dataset_dir, scene_id, suffix, pred_object_pose)
 
 
 if __name__ == '__main__':

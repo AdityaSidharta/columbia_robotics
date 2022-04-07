@@ -27,6 +27,11 @@ def visualize_path(q_1, q_2, env, color=[0, 1, 0]):
     # draw line between points
     p.addUserDebugLine(point_1, point_2, color, 1.0)
 
+
+def get_random_q():
+    return np.random.uniform(low=-np.pi*2, high=np.pi*2, size=(6,))
+
+
 def rrt(q_init, q_goal, MAX_ITERS, delta_q, steer_goal_p, env):
     """
     :param q_init: initial configuration
@@ -41,10 +46,10 @@ def rrt(q_init, q_goal, MAX_ITERS, delta_q, steer_goal_p, env):
     # This function should return a list of joint configurations
     # that the robot should take in order to reach q_goal starting from q_init
     # Use visualize_path() to visualize the edges in the exploration tree for part (b)
-    
-
-
     # ==================================
+    assert q_init.shape == (6,)
+    assert q_goal.shape == (6,)
+    vertices =
     return None
 
 def execute_path(path_conf, env):
@@ -71,17 +76,20 @@ def get_grasp_position_angle(object_id):
     :param object_id: object id
     """
     position, grasp_angle = np.zeros(3), 0
+    base_pos, base_orn = p.getBasePositionAndOrientation(object_id)
+    roll, pitch, yaw = p.getEulerFromQuaternion(base_orn)
+    print("Angle : {}, {}, {}".format(roll, pitch, yaw))
+    grasp_angle = yaw
+    position = base_pos
     # ========= TODO: Problem 2 (a) ============
     # You will p.getBasePositionAndOrientation
     # Refer to Pybullet documentation about this method
     # Pay attention that p.getBasePositionAndOrientation returns a position and a quaternion
     # while we want a position and a single angle in radians (yaw)
     # You can use p.getEulerFromQuaternion
-    
-
-    
     # ==================================
     return position, grasp_angle
+
 
 def test_robot_movement(num_trials, env):
     # Problem 1: Basic robot movement
@@ -100,9 +108,19 @@ def test_robot_movement(num_trials, env):
         link_state = p.getLinkState(env.robot_body_id, env.robot_end_effector_link_index)
         link_marker = sim.SphereMarker(link_state[0], radius=0.03, orientation=link_state[1], rgba_color=[0, 1, 0, 0.8])
         # Test position
+        # print("end gripper position : {}".format(np.abs(np.array(link_state[0]))))
+        # print("random position : {}".format(random_position))
+        #
+        # print("end gripper position : {}".format(np.abs(np.array(link_state[1]))))
+        # print("random position : {}".format(random_orientation))
+
         delta_pos = np.max(np.abs(np.array(link_state[0]) - random_position))
         delta_orn = np.max(np.abs(np.array(link_state[1]) - random_orientation))
-        if  delta_pos <= 1e-3 and delta_orn <= 1e-3:
+
+        # print("delta_pos : {}".format(delta_pos))
+        # print("delta_orn : {}".format(delta_orn))
+
+        if delta_pos <= 1e-3 and delta_orn <= 1e-3:
             passed += 1
         env.step_simulation(1000)
         # Return to robot's home configuration

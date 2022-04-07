@@ -50,6 +50,19 @@ class PyBulletSim:
         # Get revolute joint indices of robot (skip fixed joints)
         robot_joint_info = [p.getJointInfo(self.robot_body_id, i) for i in range(
             p.getNumJoints(self.robot_body_id))]
+
+        self._robot_joint_indices = [
+            x[0] for x in robot_joint_info if x[2] == p.JOINT_REVOLUTE]
+
+        self._joint_lower_bound = [
+            x[8] for x in robot_joint_info if x[2] == p.JOINT_REVOLUTE]
+
+        self._joint_upper_bound = [
+            x[9] for x in robot_joint_info if x[2] == p.JOINT_REVOLUTE]
+
+        print("_joint_lower_bound : {}".format(self._joint_lower_bound))
+        print("_joint_upper_bound : {}".format(self._joint_upper_bound))
+
         self._robot_joint_indices = [
             x[0] for x in robot_joint_info if x[2] == p.JOINT_REVOLUTE]
 
@@ -194,18 +207,20 @@ class PyBulletSim:
             @param position: Target position of the end-effector link
             @param orientation: Target orientation of the end-effector link
         """
-        target_joint_state = np.zeros(6)  # this should contain appropriate joint angle values
+        target_joint_state = p.calculateInverseKinematics(self.robot_body_id,
+                                                   self.robot_end_effector_link_index,
+                                                   targetPosition= position,
+                                                   targetOrientation=orientation,
+                                                   maxNumIterations=1000)
+        print(target_joint_state)
         # ========= TODO: Problem 1 ========
         # Using inverse kinematics (p.calculateInverseKinematics), find out the target joint configuration of the robot
         # in order to reach the desired end_effector position and orientation
         # HINT: p.calculateInverseKinematics takes in the end effector **link index** and not the **joint index**. You can use 
         #   self.robot_end_effector_link_index for this 
         # HINT: You might want to tune optional parameters of p.calculateInverseKinematics for better performance
-        
-
-        
         # ===============================
-        self.move_joints(target_joint_state)
+        self.move_joints(target_joint_state, speed=speed)
 
     def robot_go_home(self, speed=0.1):
         self.move_joints(self.robot_home_joint_config, speed)
@@ -236,7 +251,18 @@ class PyBulletSim:
         pre_grasp_position_over_bin = grasp_position+np.array([0, 0, 0.3])
         pre_grasp_position_over_object = grasp_position+np.array([0, 0, 0.1])
         post_grasp_position = grasp_position+np.array([0, 0, 0.3])
-        grasp_success = False
+
+        speed = 0.01
+
+        self.open_gripper()
+        self.move_tool(pre_grasp_position_over_bin, gripper_orientation, speed=speed)
+        self.move_tool(pre_grasp_position_over_object, gripper_orientation, speed=speed)
+        self.move_tool(grasp_position, gripper_orientation, speed=speed)
+        self.close_gripper()
+        self.move_tool(post_grasp_position, gripper_orientation, speed=speed)
+        self.robot_go_home(speed=speed)
+        grasp_success = self.check_grasp_success()
+
         # ========= TODO: Problem 2 (b) ============
         # Implement the following grasp sequence:
         # 1. open gripper
@@ -247,8 +273,6 @@ class PyBulletSim:
         # 6. Move gripper to post_grasp_position
         # 7. Move robot to robot_home_configuration
         # 8. Detect whether or not the object was grasped and return grasp_success
-
-
 
         # ============================
         return grasp_success

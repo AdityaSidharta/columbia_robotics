@@ -6,7 +6,7 @@ import time
 
 class PyBulletSim:
     """
-    PyBulletSim: Implements two tote UR5 simulation environment with obstacles for grasping 
+    PyBulletSim: Implements two tote UR5 simulation environment with obstacles for grasping
         and manipulation
     """
     def __init__(self, use_random_objects=False, object_shapes=None, gui=True):
@@ -25,7 +25,7 @@ class PyBulletSim:
             p.connect(p.GUI)
             p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
             p.resetDebugVisualizerCamera(
-                cameraDistance=2.5, 
+                cameraDistance=2.5,
                 cameraYaw=45, cameraPitch=-45,
                 cameraTargetPosition=np.zeros(3))
         else:
@@ -59,9 +59,9 @@ class PyBulletSim:
 
         self._joint_upper_bound = [
             x[9] for x in robot_joint_info if x[2] == p.JOINT_REVOLUTE]
-
-        print("_joint_lower_bound : {}".format(self._joint_lower_bound))
-        print("_joint_upper_bound : {}".format(self._joint_upper_bound))
+        #
+        # print("_joint_lower_bound : {}".format(self._joint_lower_bound))
+        # print("_joint_upper_bound : {}".format(self._joint_upper_bound))
 
         self._robot_joint_indices = [
             x[0] for x in robot_joint_info if x[2] == p.JOINT_REVOLUTE]
@@ -211,15 +211,7 @@ class PyBulletSim:
                                                    self.robot_end_effector_link_index,
                                                    targetPosition= position,
                                                    targetOrientation=orientation,
-                                                   maxNumIterations=1000)
-        print(target_joint_state)
-        # ========= TODO: Problem 1 ========
-        # Using inverse kinematics (p.calculateInverseKinematics), find out the target joint configuration of the robot
-        # in order to reach the desired end_effector position and orientation
-        # HINT: p.calculateInverseKinematics takes in the end effector **link index** and not the **joint index**. You can use 
-        #   self.robot_end_effector_link_index for this 
-        # HINT: You might want to tune optional parameters of p.calculateInverseKinematics for better performance
-        # ===============================
+                                                   maxNumIterations=100000)
         self.move_joints(target_joint_state, speed=speed)
 
     def robot_go_home(self, speed=0.1):
@@ -238,11 +230,16 @@ class PyBulletSim:
     def check_grasp_success(self):
         return p.getJointState(self._gripper_body_id, 1)[0] < 0.834 - 0.001
 
+    def release_object(self):
+        self.open_gripper()
+        self.step_simulation(1e3)
+        self.close_gripper()
+
     def execute_grasp(self, grasp_position, grasp_angle):
         """
             Execute grasp sequence
             @param: grasp_position: 3d position of place where the gripper jaws will be closed
-            @param: grasp_angle: angle of gripper before executing grasp from positive x axis in radians 
+            @param: grasp_angle: angle of gripper before executing grasp from positive x axis in radians
         """
         # Adjust grasp_position to account for end-effector length
         grasp_position = grasp_position + self._tool_tip_to_ee_joint
@@ -251,9 +248,7 @@ class PyBulletSim:
         pre_grasp_position_over_bin = grasp_position+np.array([0, 0, 0.3])
         pre_grasp_position_over_object = grasp_position+np.array([0, 0, 0.1])
         post_grasp_position = grasp_position+np.array([0, 0, 0.3])
-
-        speed = 0.01
-
+        speed = 0.03
         self.open_gripper()
         self.move_tool(pre_grasp_position_over_bin, gripper_orientation, speed=speed)
         self.move_tool(pre_grasp_position_over_object, gripper_orientation, speed=speed)
@@ -262,19 +257,6 @@ class PyBulletSim:
         self.move_tool(post_grasp_position, gripper_orientation, speed=speed)
         self.robot_go_home(speed=speed)
         grasp_success = self.check_grasp_success()
-
-        # ========= TODO: Problem 2 (b) ============
-        # Implement the following grasp sequence:
-        # 1. open gripper
-        # 2. Move gripper to pre_grasp_position_over_bin
-        # 3. Move gripper to pre_grasp_position_over_object
-        # 4. Move gripper to grasp_position
-        # 5. Close gripper
-        # 6. Move gripper to post_grasp_position
-        # 7. Move robot to robot_home_configuration
-        # 8. Detect whether or not the object was grasped and return grasp_success
-
-        # ============================
         return grasp_success
 
     def execute_place(self, place_angle=90.):
@@ -294,7 +276,7 @@ class PyBulletSim:
                 p.setJointMotorControlArray(
                     self._gripper_body_id, [6, 3, 8, 5, 10], p.POSITION_CONTROL,
                     [
-                        gripper_joint_positions[1], -gripper_joint_positions[1], 
+                        gripper_joint_positions[1], -gripper_joint_positions[1],
                         -gripper_joint_positions[1], gripper_joint_positions[1],
                         gripper_joint_positions[1]
                     ],

@@ -1,4 +1,6 @@
 from __future__ import division
+
+from collections import Counter
 from os import link
 import sim
 import pybullet as p
@@ -7,8 +9,11 @@ import numpy as np
 import math
 import argparse
 
+from graph import RRTGraph
+
 MAX_ITERS = 10000
-delta_q = 0.3
+delta_q = 0.4
+steer_goal_p = 0.8
 
 def visualize_path(q_1, q_2, env, color=[0, 1, 0]):
     """
@@ -27,11 +32,6 @@ def visualize_path(q_1, q_2, env, color=[0, 1, 0]):
     # draw line between points
     p.addUserDebugLine(point_1, point_2, color, 1.0)
 
-
-def get_random_q():
-    return np.random.uniform(low=-np.pi*2, high=np.pi*2, size=(6,))
-
-
 def rrt(q_init, q_goal, MAX_ITERS, delta_q, steer_goal_p, env):
     """
     :param q_init: initial configuration
@@ -41,34 +41,45 @@ def rrt(q_init, q_goal, MAX_ITERS, delta_q, steer_goal_p, env):
     :param steer_goal_p: probability of steering towards the goal
     :returns path: list of configurations (joint angles) if found a path within MAX_ITERS, else None
     """
-    # ========= TODO: Problem 3 (a), (b) ========
-    # Implement RRT code here. Refer to the handout for the pseudocode.
-    # This function should return a list of joint configurations
-    # that the robot should take in order to reach q_goal starting from q_init
-    # Use visualize_path() to visualize the edges in the exploration tree for part (b)
-    # ==================================
     assert q_init.shape == (6,)
     assert q_goal.shape == (6,)
-    vertices =
+    rrtgraph = RRTGraph(q_init)
+    for idx in range(MAX_ITERS):
+        if np.random.random() <= steer_goal_p:
+            target_vertex = q_goal
+        else:
+            target_vertex = rrtgraph.random_sample()
+
+        nearest_vertex, nearest_distance = rrtgraph.nearest(target_vertex)
+        new_vertex = rrtgraph.steer(nearest_vertex, target_vertex, nearest_distance, delta_q)
+        if not env.check_collision(new_vertex):
+            rrtgraph.add_vertex(new_vertex)
+            rrtgraph.add_edge(nearest_vertex, new_vertex)
+            visualize_path(nearest_vertex, new_vertex, env)
+            remaining_distance = rrtgraph.distance(new_vertex, q_goal)
+            if remaining_distance < delta_q:
+                rrtgraph.add_vertex(q_goal)
+                rrtgraph.add_edge(new_vertex, q_goal)
+                path = rrtgraph.find_path(q_init, q_goal)
+                return path
     return None
 
 def execute_path(path_conf, env):
     """
     :param path_conf: list of configurations (joint angles) 
     """
-    # ========= TODO: Problem 3 (c) ========
-    # 1. Execute the path while visualizing the location of joint 5 
-    #    (see Figure 2 in homework manual)
-    #    You can get the position of joint 5 with:
-    #         p.getLinkState(env.robot_body_id, 9)[0]
-    #    To visualize the position, you should use sim.SphereMarker
-    #    (Hint: declare a list to store the markers)
-    # 2. Drop the object (Hint: open gripper, wait, close gripper)
-    # 3. Return the robot to original location by retracing the path 
-   
-
-
-    # ==================================
+    speed = 0.03
+    markers = []
+    for conf in path_conf:
+        env.move_joints(conf, speed=speed)
+        position = p.getLinkState(env.robot_body_id, 9)[0]
+        markers.append(sim.SphereMarker(position))
+    env.release_object()
+    path_conf.reverse()
+    for conf in path_conf:
+        env.move_joints(conf, speed=speed)
+    for marker in markers:
+        del marker
 
 def get_grasp_position_angle(object_id):
     """
@@ -78,16 +89,8 @@ def get_grasp_position_angle(object_id):
     position, grasp_angle = np.zeros(3), 0
     base_pos, base_orn = p.getBasePositionAndOrientation(object_id)
     roll, pitch, yaw = p.getEulerFromQuaternion(base_orn)
-    print("Angle : {}, {}, {}".format(roll, pitch, yaw))
     grasp_angle = yaw
     position = base_pos
-    # ========= TODO: Problem 2 (a) ============
-    # You will p.getBasePositionAndOrientation
-    # Refer to Pybullet documentation about this method
-    # Pay attention that p.getBasePositionAndOrientation returns a position and a quaternion
-    # while we want a position and a single angle in radians (yaw)
-    # You can use p.getEulerFromQuaternion
-    # ==================================
     return position, grasp_angle
 
 
@@ -154,7 +157,8 @@ def test_rrt(num_trials, env):
         if grasp_success:
             # get a list of robot configuration in small step sizes
             path_conf = rrt(env.robot_home_joint_config,
-                            env.robot_goal_joint_config, MAX_ITERS, delta_q, 0.5, env)
+                            env.robot_goal_joint_config, MAX_ITERS, delta_q, steer_goal_p, env)
+            # print("path_conf : {}".format(path_conf))
             if path_conf is None:
                 print(
                     "no collision-free path is found within the time budget. continuing ...")

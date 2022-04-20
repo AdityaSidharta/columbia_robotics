@@ -29,7 +29,8 @@ class GraspLabeler:
         # TODO: complete this method
         # set gripping point self.coord to the left mouse button clicked point
         # ===============================================================================
-        pass
+        if action == cv2.EVENT_LBUTTONDOWN:
+            self.coord = (int(x), int(y))
         # ===============================================================================
     
     def __call__(self, img: np.ndarray
@@ -59,14 +60,14 @@ class GraspLabeler:
                 # rotate gripper counter clockwise by angle_delta
                 # by changing self.angle
                 # ===============================================================================
-                pass
+                self.angle = self.angle + self.angle_delta
                 # ===============================================================================
             elif key == ord('d'):
                 # TODO: complete this method
                 # rotate gripper clockwise by angle_delta
                 # by changing self.angle
                 # ===============================================================================
-                pass
+                self.angle = self.angle - self.angle_delta
                 # ===============================================================================
             elif key == 13:
                 # print('enter')
@@ -103,6 +104,7 @@ def main():
                 if coord is None:
                     print("Invalid label, please retry!")
                     continue
+                print("coord : {}, angle : {}".format(coord, angle))
                 pick_pose = env.image_pose_to_pick_pose(coord, angle, depth_obs)
                 result = env.execute_grasp(*pick_pose)
                 if result:

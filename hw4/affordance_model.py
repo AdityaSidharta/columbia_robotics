@@ -212,16 +212,18 @@ class AffordanceModel(nn.Module):
         # ===============================================================================
         coord = (index[3].item(), index[2].item())
         angle = index[0].item() * -22.5
+
         input_value = np.array(input_value.cpu())
         prediction = np.array(prediction.cpu())
         vis_list = []
+
         for i in range(8):
             input = input_value[i,...]
             target = prediction[i,...]
             vis_image = self.visualize(input, target)
             vis_image[127, :, :] = 127
             vis_list.append(vis_image)
-            if index[0].item() == i:
+            if i * -22.5 == angle:
                 draw_grasp(vis_image, coord, 0.0)
         vis_img = np.concatenate([
             np.concatenate([vis_list[0], vis_list[1]], axis = 1),
@@ -231,5 +233,5 @@ class AffordanceModel(nn.Module):
         ], axis=0)
         # ===============================================================================
         print("coord : {}, angle : {}".format(coord, angle))
-        return coord, 0.0, vis_img
+        return coord, angle, vis_img
 

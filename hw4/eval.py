@@ -31,7 +31,6 @@ def main():
 
     model_dir = os.path.join('data', args.model)
     chkpt_path = os.path.join(model_dir, 'best.ckpt')
-
     
     # load model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

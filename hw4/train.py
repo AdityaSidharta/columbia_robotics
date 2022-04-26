@@ -20,9 +20,11 @@ import affordance_model
 import action_regression_model
 from common import save_chkpt, load_chkpt
 
+
 @lru_cache(maxsize=128)
 def read_rgb_cached(file_path):
     return read_rgb(file_path)
+
 
 class RGBDataset(Dataset):
     def __init__(self, labels_dir: str):
@@ -94,12 +96,13 @@ def get_center_angle(
     center_coord: np.ndarray([x,y], dtype=np.float32)
     angle: float
     """
-    # TODO: complete this function
     # Why do we need this function?
     # Hint: read get_finger_points
     # Hint: it's a hack
     # ===============================================================================
-    center_coord, angle = None, None
+    center_coord = np.array([(left_coord[0] + right_coord[0]) / 2, (left_coord[1] + right_coord[1]) / 2])
+    x, y = right_coord - center_coord
+    angle = np.arctan2(y, x) * 180. / np.pi
     # ===============================================================================
     return center_coord, angle
 
@@ -123,11 +126,38 @@ class AugmentedDataset(Dataset):
         The output format should be exactly the same as RGBDataset.__getitem__
         """
         data_torch = self.rgb_dataset[idx]
-        # TODO: complete this method 
+        rgb = data_torch['rgb']
+        center_point = data_torch['center_point']
+        angle = data_torch['angle']
         # Hint: https://imgaug.readthedocs.io/en/latest/source/examples_keypoints.html 
         # Hint: use get_finger_points and get_center_angle
         # ===============================================================================
+        center_point_x, center_point_y = center_point[0].item(), center_point[1].item()
+        left_coord, right_coord = get_finger_points(np.array([center_point_x, center_point_y]), angle.item())
+        kps = KeypointsOnImage([
+            Keypoint(x=left_coord[0], y=left_coord[1]),
+            Keypoint(x=right_coord[0], y=right_coord[1])
+        ], shape=rgb.shape)
+        seq = iaa.Sequential([
+            self.aug_pipeline
+        ])
+        image_aug, kps_aug = seq(image=np.array(rgb), keypoints=kps)
+        left_coord_aug_x = kps_aug[0].x
+        left_coord_aug_y = kps_aug[0].y
+        right_coord_aug_x = kps_aug[1].x
+        right_coord_aug_y = kps_aug[1].y
 
+        center_coord_aug, angle_aug = get_center_angle(np.array([left_coord_aug_x, left_coord_aug_y]),
+                                                       np.array([right_coord_aug_x, right_coord_aug_y]))
+
+        data = {
+            'rgb': image_aug,
+            'center_point': np.array(center_coord_aug, dtype=np.float32),
+            'angle': np.array(angle_aug, dtype=np.float32)
+        }
+        data_torch = dict()
+        for key, value in data.items():
+            data_torch[key] = torch.from_numpy(value)
         # ===============================================================================
         return data_torch
 
@@ -231,7 +261,7 @@ def main():
     if args.model == 'affordance':
         model_class = affordance_model.AffordanceModel
         dataset_class = affordance_model.AffordanceDataset
-        max_epochs = 101
+        max_epochs = 201
         model_dir = 'data/affordance'
     else:
         model_class = action_regression_model.ActionRegressionModel
@@ -289,6 +319,7 @@ def main():
             save_chkpt(model, epoch, test_loss, chkpt_path)
             save_prediction(model, test_loader, dump_dir, BATCH_SIZE)
         epoch += 1
+
 
 if __name__ == "__main__":
     main()

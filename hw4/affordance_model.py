@@ -26,6 +26,7 @@ def get_gaussian_scoremap(
     scoremap = np.exp(-0.5/np.square(sigma)*sqrt_dist_img)
     return scoremap
 
+
 class AffordanceDataset(Dataset):
     """
     Transformational dataset.
@@ -51,11 +52,38 @@ class AffordanceDataset(Dataset):
         """
         # checkout train.RGBDataset for the content of data
         data = self.raw_dataset[idx]
-        # TODO: complete this method
+        rgb = data['rgb']
+        shape = np.array(rgb).shape
+        (img_h, img_w) = (shape[0], shape[1])
+        center_point = data['center_point']
+        angle = data['angle']
+
+        kps = KeypointsOnImage([
+            Keypoint(x=center_point[0], y=center_point[1]),
+        ], shape=shape)
+
+        seq = iaa.Sequential([
+            iaa.Rotate(-angle.item())
+        ])
+
+        image_aug, kps_aug = seq(image=np.array(rgb), keypoints=kps)
+        x_aug = kps_aug[0].x
+        y_aug = kps_aug[0].y
+
+        target = get_gaussian_scoremap((img_h, img_w), np.array([x_aug, y_aug]))
+        target = np.expand_dims(target, axis=0)
+
+        input = torch.from_numpy(image_aug).permute(2, 0, 1).type(torch.float32)
+        target = torch.from_numpy(target).type(torch.float32)
+
+        # print(input.shape)
         # Hint: Use get_gaussian_scoremap
         # Hint: https://imgaug.readthedocs.io/en/latest/source/examples_keypoints.html
         # ===============================================================================
-        return dict()
+        return {
+            'input': input,
+            'target': target
+        }
         # ===============================================================================
 
 
@@ -162,17 +190,46 @@ class AffordanceModel(nn.Module):
         Note: torchvision's rotation is counter clockwise, while imgaug,OpenCV's rotation are clockwise.
         """
         device = self.device
-        # TODO: complete this method (prediction)
+        result = []
+        print("rgb_obs.shape : {}".format(rgb_obs.shape))
+        for i in range(8):
+            seq = iaa.Sequential([iaa.Rotate(i * -22.5)])
+            rgb_rot = seq(image=rgb_obs)
+            result.append(rgb_rot)
+        input_value = torch.from_numpy(np.stack(result)).permute(0, 3, 1, 2).type(torch.float32).to(device)
+        with torch.no_grad():
+            prediction = self.predict(input_value)
+        index = ((prediction == torch.max(prediction)).nonzero())[0]
+        # print("selected index : {}".format(index))
+        # print("torch.argmax : {}".format(torch.argmax(prediction)))
+        # print("prediction shape : {}".format(prediction.shape))
         # Hint: why do we provide the model's device here?
         # ===============================================================================
-        coord, angle = None, None
-        # TODO: complete this method (visualization)
         # :vis_img: np.ndarray(shape=(H,W,3), dtype=np.uint8). Visualize prediction as a RGB image.
         # Hint: use common.draw_grasp
         # Hint: see self.visualize
         # Hint: draw a grey (127,127,127) line on the bottom row of each image.
         # ===============================================================================
-        vis_img = None
+        coord = (index[3].item(), index[2].item())
+        angle = index[0].item() * -22.5
+        input_value = np.array(input_value.cpu())
+        prediction = np.array(prediction.cpu())
+        vis_list = []
+        for i in range(8):
+            input = input_value[i,...]
+            target = prediction[i,...]
+            vis_image = self.visualize(input, target)
+            vis_image[127, :, :] = 127
+            vis_list.append(vis_image)
+            if index[0].item() == i:
+                draw_grasp(vis_image, coord, 0.0)
+        vis_img = np.concatenate([
+            np.concatenate([vis_list[0], vis_list[1]], axis = 1),
+            np.concatenate([vis_list[2], vis_list[3]], axis = 1),
+            np.concatenate([vis_list[4], vis_list[5]], axis = 1),
+            np.concatenate([vis_list[6], vis_list[7]], axis = 1),
+        ], axis=0)
         # ===============================================================================
-        return coord, angle, vis_img
+        print("coord : {}, angle : {}".format(coord, angle))
+        return coord, 0.0, vis_img
 

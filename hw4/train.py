@@ -1,24 +1,23 @@
-from typing import Dict, List, Tuple
-
-import os
 import argparse
+import json
+import os
 from functools import lru_cache
 from random import seed
-import json
+from typing import Dict, Tuple
 
-import numpy as np
-from skimage.io import imsave
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader, random_split
 import imgaug as ia
 import imgaug.augmenters as iaa
+import numpy as np
+import torch
 from imgaug.augmentables import Keypoint, KeypointsOnImage
+from skimage.io import imsave
+from torch.utils.data import Dataset, DataLoader, random_split
 
-from image import read_rgb
-import affordance_model
 import action_regression_model
-from common import save_chkpt, load_chkpt
+import affordance_improved_model
+import affordance_model
+from common import save_chkpt
+from image import read_rgb
 
 
 @lru_cache(maxsize=128)
@@ -261,15 +260,23 @@ def main():
     if args.model == 'affordance':
         model_class = affordance_model.AffordanceModel
         dataset_class = affordance_model.AffordanceDataset
-        max_epochs = 201
+        max_epochs = 101
         model_dir = 'data/affordance'
-    else:
+    elif args.model == 'affordance_improved':
+        model_class = affordance_improved_model.AffordanceImprovedModel
+        dataset_class = affordance_improved_model.AffordanceImprovedDataset
+        max_epochs = 101
+        model_dir = 'data/affordance_improved'
+    elif args.model == 'action_regression':
         model_class = action_regression_model.ActionRegressionModel
         dataset_class = action_regression_model.ActionRegressionDataset
         max_epochs = 201
         model_dir = 'data/action_regression'
+    else:
+        raise ValueError("Invalid model argument : {}".format(args.model))
     chkpt_path = os.path.join(model_dir, 'best.ckpt')
-    dump_dir = os.path.join(model_dir, 'training_vis')
+    dump_train_dir = os.path.join(model_dir, 'training_vis')
+    dump_dir = os.path.join(model_dir, 'testing_vis')
 
     seed(0)
     torch.manual_seed(0)
@@ -285,8 +292,20 @@ def main():
         raw_dataset, [int(0.9 * len(raw_dataset)), len(raw_dataset) - int(0.9 * len(raw_dataset))])
     if args.augmentation:
         train_raw_dataset = AugmentedDataset(train_raw_dataset)
-    train_dataset = dataset_class(train_raw_dataset)
-    test_dataset = dataset_class(test_raw_dataset)
+
+    if args.model == 'affordance_improved':
+        do_dataset_dir = './data/do_labels'
+        do_dataset = RGBDataset(do_dataset_dir)
+        train_do_dataset, test_do_dataset = random_split(
+            do_dataset, [int(0.9 * len(do_dataset)), len(do_dataset) - int(0.9 * len(do_dataset))])
+        if args.augmentation:
+            train_do_dataset = AugmentedDataset(train_do_dataset)
+        train_dataset = dataset_class(train_raw_dataset, train_do_dataset)
+        test_dataset = dataset_class(test_raw_dataset, test_do_dataset)
+    else:
+        train_dataset = dataset_class(train_raw_dataset)
+        test_dataset = dataset_class(test_raw_dataset)
+
     print(f"Train dataset: {len(train_dataset)}; Test dataset: {len(test_dataset)}")
 
     BATCH_SIZE = 8
@@ -317,6 +336,7 @@ def main():
         if epoch % 5 == 0 and test_loss < best_loss:
             best_loss = test_loss
             save_chkpt(model, epoch, test_loss, chkpt_path)
+            save_prediction(model, train_loader, dump_train_dir, BATCH_SIZE)
             save_prediction(model, test_loader, dump_dir, BATCH_SIZE)
         epoch += 1
 

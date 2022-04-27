@@ -38,6 +38,10 @@ class AffordanceDataset(Dataset):
     
     def __len__(self) -> int:
         return len(self.raw_dataset)
+
+    def _get_data(self, idx):
+        data = self.raw_dataset[idx]
+        return data
     
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         """
@@ -51,7 +55,7 @@ class AffordanceDataset(Dataset):
         Note: self.raw_dataset[idx]['rgb'] is torch.Tensor (H,W,3) torch.uint8
         """
         # checkout train.RGBDataset for the content of data
-        data = self.raw_dataset[idx]
+        data = self._get_data(idx)
         rgb = data['rgb']
         shape = np.array(rgb).shape
         (img_h, img_w) = (shape[0], shape[1])
@@ -177,9 +181,13 @@ class AffordanceModel(nn.Module):
         img = (np.concatenate(row, axis=1)*255).astype(np.uint8)
         return img
 
+    @staticmethod
+    def get_nth_index(prediction, n):
+        nth_prediction = torch.topk(prediction.flatten(), n)[0][-1].item()
+        index = ((prediction == nth_prediction).nonzero())[0]
+        return index
 
-    def predict_grasp(self, rgb_obs: np.ndarray
-            ) -> Tuple[Tuple[int, int], float, np.ndarray]:
+    def predict_grasp(self, rgb_obs: np.ndarray, n=1) -> Tuple[Tuple[int, int], float, np.ndarray]:
         """
         Given a RGB image observation, predict the grasping location and angle in image space.
         return coord, angle, vis_img
@@ -199,7 +207,8 @@ class AffordanceModel(nn.Module):
         input_value = torch.from_numpy(np.stack(result)).permute(0, 3, 1, 2).type(torch.float32).to(device)
         with torch.no_grad():
             prediction = self.predict(input_value)
-        index = ((prediction == torch.max(prediction)).nonzero())[0]
+
+        index = self.get_nth_index(prediction, n)
         # print("selected index : {}".format(index))
         # print("torch.argmax : {}".format(torch.argmax(prediction)))
         # print("prediction shape : {}".format(prediction.shape))
@@ -216,6 +225,7 @@ class AffordanceModel(nn.Module):
         input_value = np.array(input_value.cpu())
         prediction = np.array(prediction.cpu())
         vis_list = []
+        chosen_input = None
 
         for i in range(8):
             input = input_value[i,...]
@@ -225,6 +235,7 @@ class AffordanceModel(nn.Module):
             vis_list.append(vis_image)
             if i * -22.5 == angle:
                 draw_grasp(vis_image, coord, 0.0)
+                chosen_input = np.moveaxis(input, 0, -1)
         vis_img = np.concatenate([
             np.concatenate([vis_list[0], vis_list[1]], axis = 1),
             np.concatenate([vis_list[2], vis_list[3]], axis = 1),
@@ -233,5 +244,21 @@ class AffordanceModel(nn.Module):
         ], axis=0)
         # ===============================================================================
         print("coord : {}, angle : {}".format(coord, angle))
-        return coord, angle, vis_img
+
+        kps = KeypointsOnImage([
+            Keypoint(x=coord[0], y=coord[1]),
+        ], shape=chosen_input.shape)
+
+        seq = iaa.Sequential([
+            iaa.Rotate(-angle)
+        ])
+
+        image_aug, kps_aug = seq(image=chosen_input, keypoints=kps)
+        x_aug = int(kps_aug[0].x)
+        y_aug = int(kps_aug[0].y)
+        coord_aug = (x_aug, y_aug)
+
+        print("result coord : {}, angle : {}".format(coord_aug, -angle))
+
+        return coord_aug, -angle, vis_img
 

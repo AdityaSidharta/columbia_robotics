@@ -36,9 +36,35 @@ class ActionRegressionDataset(Dataset):
         """
         # checkout train.RGBDataset for the content of data
         data = self.raw_dataset[idx]
-        # TODO: complete this method
+
+        rgb = np.array(data['rgb'])
+        center_point = np.array(data['center_point'])
+        angle = np.array(data['angle'])
+
+        x_max = rgb.shape[0]
+        y_max = rgb.shape[1]
+
+        # print("x_max : {}".format(x_max))
+        # print("y_max : {}".format(y_max))
+        x = center_point[0]
+        y = center_point[1]
+
+        x_norm = x / x_max
+        y_norm = y / y_max
+
+        assert -180. <= angle <= 180.
+        angle_norm = (angle + 180.) / 360.
+
+        # print("x : {}, y : {}, angle : {}, x_norm : {}, y_norm : {}, angle_norm : {}".format(x, y, angle, x_norm, y_norm, angle_norm))
+
+        input = torch.from_numpy(rgb).permute(2, 0, 1).type(torch.float32)
+        target = torch.from_numpy(np.array([x_norm, y_norm, angle_norm])).type(torch.float32)
+
         # ===============================================================================
-        return dict()
+        return {
+            'input': input,
+            'target': target
+        }
         # ===============================================================================
 
 
@@ -52,9 +78,12 @@ def recover_action(
     coord: tuple(x, y) in pixel coordinate between 0 and :shape:
     angle: float in degrees, clockwise
     """
-    # TODO: complete this function
     # ===============================================================================
-    coord, angle = None, None
+    x_norm, y_norm, angle_norm = action[0], action[1], action[2]
+    x = x_norm * shape[0]
+    y = y_norm * shape[1]
+    angle = (angle_norm * 360.) - 180.
+    coord, angle = (int(x), int(y)), angle
     # ===============================================================================
     return coord, angle
 
@@ -74,6 +103,7 @@ class ActionRegressionModel(nn.Module):
                                  std=[0.229, 0.224, 0.225])
         # hack to get model device
         self.dummy_param = nn.Parameter(torch.empty(0))
+        self.angle_weight = 0.1
 
     @property
     def device(self) -> torch.device:
@@ -89,14 +119,19 @@ class ActionRegressionModel(nn.Module):
         """
         return self.forward(x)
 
-    @staticmethod
-    def get_criterion():
+    def action_loss(self, output, target):
+        x_loss = torch.mean((output[:, 0] - target[:, 0])**2)
+        y_loss = torch.mean((output[:, 1] - target[:, 1])**2)
+        angle_loss = torch.mean(1 - torch.cos(output[:, 2] - target[:, 2]))
+        # print("x_loss : {}, y_loss : {}, angle_loss: {}".format(x_loss, y_loss, angle_loss))
+        return x_loss + y_loss + (self.angle_weight * angle_loss)
+
+    def get_criterion(self):
         """
         Return the Loss object needed for training.
         """
-        # TODO: complete this method
         # ===============================================================================
-        return nn.Module()
+        return nn.MSELoss()
         # ===============================================================================
 
     @staticmethod
@@ -127,11 +162,16 @@ class ActionRegressionModel(nn.Module):
         Hint: use recover_action
         """
         device = self.device
-        # TODO: complete this method (prediction)
+        rgb_obs = np.moveaxis(rgb_obs, -1, 0)
+        rgb_obs = np.expand_dims(rgb_obs, axis = 0)
+        input_value = torch.from_numpy(rgb_obs).type(torch.float32).to(device)
+        with torch.no_grad():
+            action = self.predict(input_value)[0].cpu().numpy()
         # Hint: why do we provide the model's device here?
         # ===============================================================================
-        coord, angle, action = None, None, None
+        (coord, angle), action = recover_action(action), action
         # ===============================================================================
         # visualization
-        vis_img = self.visualize(input, action)
+        vis_img = self.visualize(rgb_obs[0,...], action)
+        print("coord : {}, angle : {}".format(coord, angle))
         return coord, angle, vis_img

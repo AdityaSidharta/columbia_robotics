@@ -1,6 +1,7 @@
 import os
 import pathlib
 import argparse
+import random
 from itertools import chain
 
 import torch
@@ -11,6 +12,8 @@ from env import UR5PickEnviornment
 from common import load_chkpt, get_splits
 import affordance_model
 import action_regression_model
+import affordance_improved_model
+
 
 def main():
     parser = argparse.ArgumentParser(description='Model eval script')
@@ -24,10 +27,16 @@ def main():
         help='random seed for empty_bin task')
     args = parser.parse_args()
 
+    n_points = 10
+
     if args.model == 'action_regression':
         model_class = action_regression_model.ActionRegressionModel
-    else:
+    elif args.model == 'affordance':
         model_class = affordance_model.AffordanceModel
+    elif args.model == 'affordance_improved':
+        model_class = affordance_improved_model.AffordanceImprovedModel
+    else:
+        raise ValueError("Invalid model_class : {}".format(args.model))
 
     model_dir = os.path.join('data', args.model)
     chkpt_path = os.path.join(model_dir, 'best.ckpt')
@@ -86,7 +95,12 @@ def main():
         for attempt_id in range(n_attempts):
             print("Attempt {}".format(attempt_id))
             rgb_obs, depth_obs, _ = env.observe()
-            coord, angle, vis_img = model.predict_grasp(rgb_obs)
+            if args.model == 'affordance_improved':
+                n = random.choice(range(1, n_points))
+                print("Selected nth best : {}".format(n))
+                coord, angle, vis_img = model.predict_grasp(rgb_obs, n=n)
+            else:
+                coord, angle, vis_img = model.predict_grasp(rgb_obs)
             pick_pose = env.image_pose_to_pick_pose(coord, angle, depth_obs)
             result = env.execute_grasp(*pick_pose)
             if result:

@@ -27,7 +27,7 @@ def main():
         help='random seed for empty_bin task')
     args = parser.parse_args()
 
-    n_points = 10
+    n_points = 25
 
     if args.model == 'action_regression':
         model_class = action_regression_model.ActionRegressionModel
